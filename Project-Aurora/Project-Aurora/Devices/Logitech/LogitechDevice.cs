@@ -152,6 +152,7 @@ namespace Aurora.Devices.Logitech
     {
         private String devicename = "Logitech";
         private bool isInitialized = false;
+        private bool ledSDKPresent = false;
 
         private bool keyboard_updated = false;
         private bool peripheral_updated = false;
@@ -180,7 +181,9 @@ namespace Aurora.Devices.Logitech
                     {
                         LogitechGSDK.LGDLL? dll = null;
                         if (Global.Configuration.VarRegistry.GetVariable<bool>($"{devicename}_override_dll"))
+                        {
                             dll = Global.Configuration.VarRegistry.GetVariable<LogitechGSDK.LGDLL>($"{devicename}_override_dll_option");
+                        }
 
                         LogitechGSDK.InitDLL(dll);
 
@@ -188,7 +191,12 @@ namespace Aurora.Devices.Logitech
                         {
                             Global.logger.Error("Logitech LED SDK could not be initialized.");
 
+                            LogitechGSDK.LogiLedShutdown();
+                            LogitechGSDK.ReleaseDLL();
+
                             isInitialized = false;
+                            /* we have the SKD present but neither GHub nor LGS is running */
+                            ledSDKPresent = true;
                             return false;
                         }
 
@@ -216,6 +224,7 @@ namespace Aurora.Devices.Logitech
                             }
 
                             isInitialized = true;
+                            ledSDKPresent = true;
                             return true;
                         }
                         else
@@ -309,7 +318,11 @@ namespace Aurora.Devices.Logitech
             {
                 LogitechGSDK.LogiLedSetTargetDevice(LogitechGSDK.LOGI_DEVICETYPE_PERKEY_RGB);
 
-                LogitechGSDK.LogiLedSetLightingFromBitmap(bitmap);
+                if(!LogitechGSDK.LogiLedSetLightingFromBitmap(bitmap))
+                {
+                    isInitialized = false;
+                }
+
                 bitmap.CopyTo(previous_bitmap, 0);
                 keyboard_updated = true;
             }
@@ -330,7 +343,10 @@ namespace Aurora.Devices.Logitech
 
                     //System.Diagnostics.Debug.WriteLine("R: " + red_amt + " G: " + green_amt + " B: " + blue_amt);
 
-                    LogitechGSDK.LogiLedSetLighting(red_amt, green_amt, blue_amt);
+                    if(!LogitechGSDK.LogiLedSetLighting(red_amt, green_amt, blue_amt))
+                    {
+                        isInitialized = false;
+                    }
                     previous_peripheral_Color = color;
                     peripheral_updated = true;
                 }
@@ -347,6 +363,12 @@ namespace Aurora.Devices.Logitech
 
         public bool IsInitialized()
         {
+            if(ledSDKPresent && !isInitialized)
+            {
+                Initialize();
+            }
+
+                
             return this.isInitialized;
         }
 
